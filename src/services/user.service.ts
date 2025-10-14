@@ -1,6 +1,6 @@
 import { prisma } from "../prisma.js";
 import Jwt from "jsonwebtoken";
-import sharp from 'sharp'; // Importando a biblioteca SHARP
+import sharp from 'sharp';
 
 // ===================================================================
 //   FUNÇÕES AUXILIARES PARA PROCESSAMENTO E COMPARAÇÃO DE IMAGEM
