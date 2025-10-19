@@ -74,10 +74,13 @@ export const userService = {
             userlastname: string,
             usernickname: string,
             useremail: string,
-            userrole: number
+            userrole: number | string
         }, 
         imageBuffer: Buffer
     ) {
+
+        const userRoleNumber = Number(data.userrole);
+
         if (!imageBuffer) {
             throw new Error("Imagem da digital é obrigatória para o cadastro.");
         }
@@ -90,9 +93,11 @@ export const userService = {
             throw new Error('Email ou nickName ja foram cadastrados');
         }
 
-        if (![1, 2, 3].includes(data.userrole)) {
+        console.log(typeof(data.userrole));
+
+        if (![1, 2, 3].includes(userRoleNumber)) {
             throw new Error('Valor inválido para userrole. Use apenas 1, 2 ou 3.');
-          }
+        }
 
         // Gera o template biométrico a partir da imagem usando SHARP
         const fingerprintTemplate = await generateFingerprintTemplate(imageBuffer);
@@ -100,6 +105,7 @@ export const userService = {
         const user = await prisma.user.create({
             data: {
                 ...data,
+                userrole: userRoleNumber,
                 fingerprintTemplate: fingerprintTemplate, // Salva o template JSON no banco
                 userisativo: true
             }
@@ -266,6 +272,7 @@ export const userService = {
                 userlastname: true,
                 usernickname: true,
                 useremail: true,
+                userrole: true
             }
         });
 
