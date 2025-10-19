@@ -91,7 +91,8 @@ Cria um novo usuário no sistema a partir de seus dados e da imagem de sua digit
 | `userlastname` | Text          | Sim         | Sobrenome do usuário.                   |
 | `usernickname` | Text          | Sim         | Apelido único para o usuário.           |
 | `useremail`    | Text          | Sim         | E-mail único do usuário.                |
-| `fingerprint`  | **File** | Sim         | Arquivo de imagem da impressão digital. |
+| `userrole`     | Text          | Sim         | Nivel de Usuário aceita (1, 2, 3)       |
+| `fingerprint`  | **File**      | Sim         | Arquivo de imagem da impressão digital. |
 
 #### Exemplo de Resposta de Sucesso (`201 Created`)
 
