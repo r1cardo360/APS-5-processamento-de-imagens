@@ -11,6 +11,7 @@ import {
     updateUser
 } from "../controllers/user.controller.js";
 import { authenticaAccessToken } from "../middlewares/middleware.js";
+import { authorizeRole } from "../middlewares/middlewareAutorizaRole.js";
 import { upload } from "../middlewares/upload.js";
 
 const router = express.Router();

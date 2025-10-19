@@ -74,6 +74,7 @@ export const userService = {
             userlastname: string,
             usernickname: string,
             useremail: string,
+            userrole: number
         }, 
         imageBuffer: Buffer
     ) {
@@ -88,6 +89,10 @@ export const userService = {
         if (existingUser) {
             throw new Error('Email ou nickName ja foram cadastrados');
         }
+
+        if (![1, 2, 3].includes(data.userrole)) {
+            throw new Error('Valor inválido para userrole. Use apenas 1, 2 ou 3.');
+          }
 
         // Gera o template biométrico a partir da imagem usando SHARP
         const fingerprintTemplate = await generateFingerprintTemplate(imageBuffer);
@@ -151,7 +156,7 @@ export const userService = {
         }
 
         const acessToken = Jwt.sign(
-            { userpk: user.id, usernickname: user.usernickname },
+            { userpk: user.id, usernickname: user.usernickname, userrole: user.userrole },
             process.env.JWT_SECRET_ACCESS!,
             { expiresIn: '25m' }
         );

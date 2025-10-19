@@ -14,7 +14,8 @@ model User {
   userlastname     String
   usernickname     String   @unique
   useremail        String   @unique
-  userisativo      Boolean  @default(true) 
+  userisativo      Boolean  @default(true)
+  userrole         Int      @default(1) 
 
   fingerprintTemplate Json
 
