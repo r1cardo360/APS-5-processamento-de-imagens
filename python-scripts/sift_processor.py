@@ -1,12 +1,27 @@
+#!/usr/bin/env python3
+"""
+Processador de impressões digitais usando SIFT (Scale-Invariant Feature Transform)
+Este script extrai características robustas de imagens de digitais para autenticação biométrica
+"""
 
-import cv2
-import numpy as np
-import json
 import sys
+import json
 import base64
-from io import BytesIO
+
+try:
+    import cv2
+    import numpy as np
+except ImportError as e:
+    print(json.dumps({
+        'success': False, 
+        'error': f'Erro ao importar bibliotecas: {str(e)}. Certifique-se de que py3-opencv e py3-numpy estão instalados.'
+    }))
+    sys.exit(1)
 
 def preprocess_fingerprint(image):
+    """
+    Pré-processa a imagem da digital para melhorar a detecção de características
+    """
     # Converte para escala de cinza se necessário
     if len(image.shape) == 3:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)

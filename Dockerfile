@@ -37,17 +37,16 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Instala apenas as dependências de runtime do OpenCV
+# Instala apenas as dependências de runtime do OpenCV e Python
 RUN apk add --no-cache \
     python3 \
     py3-pip \
+    py3-numpy \
+    py3-opencv \
     opencv \
     openblas \
     libpng \
     libjpeg-turbo
-
-# Instala opencv-python para usar o SIFT
-RUN pip3 install --no-cache-dir opencv-contrib-python numpy
 
 # Copia os arquivos buildados do estágio anterior
 COPY --from=builder /app/node_modules ./node_modules
