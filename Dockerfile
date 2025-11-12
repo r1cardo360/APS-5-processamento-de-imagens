@@ -16,11 +16,11 @@ RUN apt-get update && \
         libavcodec-dev \
         libavformat-dev \
         libswscale-dev \
-        libtbb2 \
         libtbb-dev \
         libjpeg-dev \
         libpng-dev \
         libtiff-dev \
+        libtbbmalloc2 \
     # Limpeza para otimização
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
