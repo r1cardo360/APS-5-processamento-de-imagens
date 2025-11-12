@@ -1,57 +1,63 @@
 # =============================================
-# ESTÁGIO 1: Builder - Constrói a aplicação e o OpenCV
+# ESTÁGIO 1: Builder - Constrói a aplicação
 # =============================================
-FROM node:20 AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# 1. Instalar as Dependências Nativas do OpenCV (em Debian/Ubuntu)
-RUN apt-get update && \
-    apt-get install -y \
-        build-essential \
-        cmake \
-        git \
-        libgtk2.0-dev \
-        pkg-config \
-        libavcodec-dev \
-        libavformat-dev \
-        libswscale-dev \
-        libtbb-dev \
-        libjpeg-dev \
-        libpng-dev \
-        libtiff-dev \
-        libtbbmalloc2 \
-    # Limpeza para otimização
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+# Instala dependências do sistema necessárias para OpenCV
+RUN apk add --no-cache \
+    python3 \
+    py3-pip \
+    build-base \
+    cmake \
+    openblas-dev \
+    opencv-dev \
+    opencv \
+    libpng-dev \
+    libjpeg-turbo-dev
 
-# Instala todas as dependências (incluindo o opencv4nodejs)
+# Copia arquivos de dependências
 COPY package*.json ./
-# O 'npm install' agora instalará e compilará o opencv4nodejs
+
+# Instala dependências do Node.js
 RUN npm install
 
 # Copia o resto do código
 COPY . .
 
+# Gera o Prisma Client e builda o projeto
 RUN npx prisma generate
 RUN npm run build
 
 # =============================================
 # ESTÁGIO 2: Production - Roda a aplicação
 # =============================================
-FROM node:20-slim
+FROM node:20-alpine
 
 WORKDIR /app
 
-# 1. Copiar binários e bibliotecas do opencv4nodejs
+# Instala apenas as dependências de runtime do OpenCV
+RUN apk add --no-cache \
+    python3 \
+    py3-pip \
+    opencv \
+    openblas \
+    libpng \
+    libjpeg-turbo
+
+# Instala opencv-python para usar o SIFT
+RUN pip3 install --no-cache-dir opencv-contrib-python numpy
+
+# Copia os arquivos buildados do estágio anterior
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /usr/lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu
-RUN apt-get update && apt-get install -y libjpeg62-turbo libpng16-16 libtiff5 && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-
-# 2. Copiar o restante da aplicação
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 
+# Cria diretório para scripts Python
+RUN mkdir -p /app/python-scripts
+
 EXPOSE 7787
+
 CMD ["sh", "-c", "npx prisma migrate deploy && npm start"]

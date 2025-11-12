@@ -1,80 +1,6 @@
 import { prisma } from "../prisma.js";
 import Jwt from "jsonwebtoken";
-import sharp from 'sharp';
-
-// ===================================================================
-//   FUNÇÕES AUXILIARES PARA PROCESSAMENTO E COMPARAÇÃO DE IMAGEM
-// ===================================================================
-
-/**
- * Gera um template biométrico (histograma) a partir de um buffer de imagem usando a biblioteca sharp.
- * @param imageBuffer O buffer do arquivo de imagem.
- * @returns Um objeto contendo o histograma da imagem em escala de cinza (array de 256 posições).
- */
-async function generateFingerprintTemplate(imageBuffer: Buffer): Promise<{ histogram: number[] }> {
-    try {
-        // Converte a imagem para escala de cinza e extrai os dados brutos dos pixels
-        const { data } = await sharp(imageBuffer)
-            .grayscale()
-            .raw()
-            .toBuffer({ resolveWithObject: true });
-
-        // Cria um array de 256 posições, todas com valor 0
-        const histogram = new Array(256).fill(0);
-
-        for (const pixelValue of data) {
-            histogram[pixelValue]++;
-        }
-        
-        return { histogram };
-    } catch (error) {
-        console.error("Erro ao processar imagem com a sharp:", error);
-        throw new Error("Não foi possível processar a imagem fornecida.");
-    }
-}
-
-/**
- * Aplica uma limiarização (binarização) no histograma para criar um vetor compacto (apenas 0s e 1s).
- * @param histogram O array de histograma de 256 posições.
- * @param threshold O limite de contagem de pixels para definir 0 ou 1.
- * @returns Um array de 256 posições contendo apenas 0s e 1s.
- */
-function createBinaryTemplate(histogram: number[], threshold: number = 500): number[] {
-    // Retorna 1 se a contagem for maior que o threshold, 0 caso contrário.
-    // O threshold (500) é um valor de exemplo e deve ser ajustado/otimizado.
-    const binaryTemplate = histogram.map(count => (count > threshold ? 1 : 0));
-    
-    return binaryTemplate;
-}
-
-
-/**
- * Compara dois templates biométricos BINÁRIOS e retorna um score de similaridade (0 a 1).
- * Usa a contagem de "bits" correspondentes.
- * @param templateA O primeiro template binário (array de 0s e 1s).
- * @param templateB O segundo template binário (array de 0s e 1s).
- * @returns Um número entre 0 (totalmente diferente) e 1 (idêntico).
- */
-function compareBinaryTemplates(templateA: number[], templateB: number[]): number {
-    if (templateA.length !== templateB.length || templateA.length === 0) {
-        return 0;
-    }
-
-    let matches = 0;
-    for (let i = 0; i < templateA.length; i++) {
-        // Conta quantos elementos (bits) são estritamente iguais
-        if (templateA[i] === templateB[i]) {
-            matches++;
-        }
-    }
-    // Retorna a proporção de matches
-    return matches / templateA.length; 
-}
-
-
-// ===================================================================
-//   LÓGICA PRINCIPAL DO SERVICE
-// ===================================================================
+import { extractSIFTFeatures, compareSIFTTemplates, validateSIFTTemplate, type SIFTTemplate } from "../helpers/sift.helper.js";
 
 export const userService = {
     async createUser(
@@ -87,7 +13,6 @@ export const userService = {
         }, 
         imageBuffer: Buffer
     ) {
-
         const userRoleNumber = Number(data.userrole);
 
         if (!imageBuffer) {
@@ -99,7 +24,7 @@ export const userService = {
         });
 
         if (existingUser) {
-            throw new Error('Email ou nickName ja foram cadastrados');
+            throw new Error('Email ou nickName já foram cadastrados');
         }
 
         console.log(`Tipo de dado de userrole recebido: ${typeof(data.userrole)}`);
@@ -108,17 +33,26 @@ export const userService = {
             throw new Error('Valor inválido para userrole. Use apenas 1, 2 ou 3.');
         }
 
-        // 1. Gera o template (histograma)
-        const { histogram } = await generateFingerprintTemplate(imageBuffer);
-
-        // 2. Limiariza/Binariza o template
-        const binaryTemplate = createBinaryTemplate(histogram); 
+        // 1. Extrai características SIFT da impressão digital
+        console.log('[SIFT] Extraindo características da digital...');
+        const siftTemplate = await extractSIFTFeatures(imageBuffer);
         
-        // 3. Gera o JWT contendo o template binarizado (Armazenamento ofuscado)
+        // 2. Valida se o template tem qualidade suficiente
+        if (!validateSIFTTemplate(siftTemplate, 50)) {
+            throw new Error('A qualidade da imagem da digital é insuficiente. Capture uma imagem melhor com pelo menos 50 características detectáveis.');
+        }
+        
+        console.log(`[SIFT] ${siftTemplate.num_features} características detectadas`);
+        
+        // 3. Armazena o template SIFT em JWT (criptografado)
         const templateToken = Jwt.sign(
-            { template: binaryTemplate },
+            { 
+                template: siftTemplate,
+                algorithm: 'SIFT',
+                version: '1.0'
+            },
             process.env.JWT_TEMPLATE_SECRET || 'SECRET_DO_TEMPLATE_MUITO_SECRETA', 
-            { expiresIn: '365d' } // Tempo de vida longo para o template
+            { expiresIn: '365d' }
         );
 
         const user = await prisma.user.create({
@@ -170,29 +104,49 @@ export const userService = {
         
         const storedTemplateToken = user.fingerprintTemplate as string;
 
-        let storedBinaryTemplate: number[] = [];
+        let storedTemplate: SIFTTemplate;
         try {
             const payload: any = Jwt.verify(
                 storedTemplateToken, 
                 process.env.JWT_TEMPLATE_SECRET || 'SECRET_DO_TEMPLATE_MUITO_SECRETA'
             );
-            storedBinaryTemplate = payload.template; 
+            storedTemplate = payload.template;
+            
+            // Verifica se é um template SIFT
+            if (payload.algorithm !== 'SIFT') {
+                throw new Error('Template armazenado não é SIFT. Recadastramento necessário.');
+            }
         } catch (error) {
             throw new Error('Template biométrico salvo inválido ou expirado. Contate o suporte.');
         }
 
-
-        const { histogram: loginHistogram } = await generateFingerprintTemplate(imageBuffer);
-        const loginBinaryTemplate = createBinaryTemplate(loginHistogram); 
+        // Extrai características SIFT da digital fornecida no login
+        console.log('[SIFT Login] Extraindo características da digital fornecida...');
+        const loginTemplate = await extractSIFTFeatures(imageBuffer);
         
-        const similarity = compareBinaryTemplates(storedBinaryTemplate, loginBinaryTemplate);
+        // Valida o template de login
+        if (!validateSIFTTemplate(loginTemplate, 30)) {
+            throw new Error('A qualidade da imagem fornecida é insuficiente para autenticação.');
+        }
         
-        const SIMILARITY_THRESHOLD = 0.85; // Ajuste o limiar de similaridade para templates binários (pode ser mais baixo que antes)
-        console.log(`[Login Attempt] Binary Similarity Score: ${similarity}`);
-
-        if (similarity < SIMILARITY_THRESHOLD) {
+        console.log(`[SIFT Login] ${loginTemplate.num_features} características detectadas`);
+        
+        // Compara os templates usando SIFT
+        const comparison = await compareSIFTTemplates(storedTemplate, loginTemplate);
+        
+        console.log(`[SIFT Login] Similaridade: ${comparison.similarity.toFixed(4)}`);
+        console.log(`[SIFT Login] Matches válidos: ${comparison.good_matches}/${comparison.total_matches}`);
+        
+        // Define threshold de similaridade
+        const SIMILARITY_THRESHOLD = 0.30;
+        const MIN_MATCHES = 15;
+        
+        if (comparison.similarity < SIMILARITY_THRESHOLD || comparison.good_matches < MIN_MATCHES) {
+            console.log(`[SIFT Login] Autenticação NEGADA - Similarity: ${comparison.similarity.toFixed(4)}, Matches: ${comparison.good_matches}`);
             throw new Error('Digital não corresponde.');
         }
+
+        console.log('[SIFT Login] Autenticação APROVADA ✓');
 
         const acessToken = Jwt.sign(
             { userpk: user.id, usernickname: user.usernickname, userrole: user.userrole },
@@ -222,7 +176,13 @@ export const userService = {
         return {
             user: userWithoutSensitiveData,
             accessToken: acessToken,
-            refreshToken: refreshToken
+            refreshToken: refreshToken,
+            biometricInfo: {
+                algorithm: 'SIFT',
+                similarity: comparison.similarity,
+                matches: comparison.good_matches,
+                features: loginTemplate.num_features
+            }
         }
     },
 
