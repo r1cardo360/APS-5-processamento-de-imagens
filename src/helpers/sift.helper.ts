@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import path from 'path';
+import fs from 'fs';
 
 /**
  * Interface para o template SIFT
@@ -29,32 +30,37 @@ export interface ComparisonResult {
 }
 
 /**
+ * Encontra o caminho do script Python
+ */
+function findPythonScript(): string {
+    const possiblePaths: string[] = [
+        path.join(process.cwd(), 'python-scripts', 'sift_processor.py'),
+        path.join(__dirname, '..', '..', 'python-scripts', 'sift_processor.py'),
+        '/app/python-scripts/sift_processor.py'
+    ];
+    
+    for (const p of possiblePaths) {
+        try {
+            if (fs.existsSync(p)) {
+                return p;
+            }
+        } catch (e) {
+            // Continua tentando
+        }
+    }
+    
+    // Se não encontrar, retorna o primeiro (garantido que existe)
+    return possiblePaths[0]!;
+}
+
+/**
  * Extrai características SIFT de um buffer de imagem usando OpenCV via Python
  * @param imageBuffer Buffer da imagem
  * @returns Template SIFT com keypoints e descritores
  */
 export async function extractSIFTFeatures(imageBuffer: Buffer): Promise<SIFTTemplate> {
     return new Promise((resolve, reject) => {
-        // Caminho para o script Python - tenta vários locais possíveis
-        const possiblePaths = [
-            path.join(process.cwd(), 'python-scripts', 'sift_processor.py'),
-            path.join(__dirname, '..', '..', 'python-scripts', 'sift_processor.py'),
-            '/app/python-scripts/sift_processor.py'
-        ];
-        
-        // Encontra o primeiro caminho que existe
-        let scriptPath = possiblePaths[0];
-        for (const p of possiblePaths) {
-            try {
-                const fs = require('fs');
-                if (fs.existsSync(p)) {
-                    scriptPath = p;
-                    break;
-                }
-            } catch (e) {
-                // Continua tentando
-            }
-        }
+        const scriptPath = findPythonScript();
         
         console.log(`[SIFT] Usando script Python em: ${scriptPath}`);
         
@@ -65,17 +71,17 @@ export async function extractSIFTFeatures(imageBuffer: Buffer): Promise<SIFTTemp
         let errorData = '';
         
         // Captura stdout
-        pythonProcess.stdout.on('data', (data) => {
+        pythonProcess.stdout.on('data', (data: Buffer) => {
             outputData += data.toString();
         });
         
         // Captura stderr
-        pythonProcess.stderr.on('data', (data) => {
+        pythonProcess.stderr.on('data', (data: Buffer) => {
             errorData += data.toString();
         });
         
         // Quando o processo termina
-        pythonProcess.on('close', (code) => {
+        pythonProcess.on('close', (code: number | null) => {
             if (code !== 0) {
                 console.error('Python stderr:', errorData);
                 reject(new Error(`Processo Python falhou com código ${code}: ${errorData}`));
@@ -117,40 +123,22 @@ export async function compareSIFTTemplates(
     template2: SIFTTemplate
 ): Promise<ComparisonResult> {
     return new Promise((resolve, reject) => {
-        // Caminho para o script Python - tenta vários locais possíveis
-        const possiblePaths = [
-            path.join(process.cwd(), 'python-scripts', 'sift_processor.py'),
-            path.join(__dirname, '..', '..', 'python-scripts', 'sift_processor.py'),
-            '/app/python-scripts/sift_processor.py'
-        ];
-        
-        let scriptPath = possiblePaths[0];
-        for (const p of possiblePaths) {
-            try {
-                const fs = require('fs');
-                if (fs.existsSync(p)) {
-                    scriptPath = p;
-                    break;
-                }
-            } catch (e) {
-                // Continua tentando
-            }
-        }
+        const scriptPath = findPythonScript();
         
         const pythonProcess = spawn('python3', [scriptPath, 'compare']);
         
         let outputData = '';
         let errorData = '';
         
-        pythonProcess.stdout.on('data', (data) => {
+        pythonProcess.stdout.on('data', (data: Buffer) => {
             outputData += data.toString();
         });
         
-        pythonProcess.stderr.on('data', (data) => {
+        pythonProcess.stderr.on('data', (data: Buffer) => {
             errorData += data.toString();
         });
         
-        pythonProcess.on('close', (code) => {
+        pythonProcess.on('close', (code: number | null) => {
             if (code !== 0) {
                 console.error('Python stderr:', errorData);
                 reject(new Error(`Processo Python falhou com código ${code}: ${errorData}`));
@@ -177,6 +165,7 @@ export async function compareSIFTTemplates(
             }
         });
         
+        // Envia os templates como JSON para o stdin
         const input = JSON.stringify({
             template1,
             template2
