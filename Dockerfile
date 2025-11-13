@@ -19,14 +19,8 @@ RUN apk add --no-cache \
 
 # Copia arquivos de dependências
 COPY package*.json ./
-
-# Instala dependências do Node.js
 RUN npm install
-
-# Copia o resto do código
 COPY . .
-
-# Gera o Prisma Client e builda o projeto
 RUN npx prisma generate
 RUN npm run build
 
@@ -54,8 +48,12 @@ COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
 
-# Cria diretório para scripts Python
+# Cria diretório para scripts Python e copia o script
 RUN mkdir -p /app/python-scripts
+COPY --from=builder /app/python-scripts ./python-scripts
+
+# Torna o script Python executável
+RUN chmod +x /app/python-scripts/sift_processor.py
 
 EXPOSE 7787
 

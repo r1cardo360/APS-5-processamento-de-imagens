@@ -35,20 +35,46 @@ export interface ComparisonResult {
  */
 export async function extractSIFTFeatures(imageBuffer: Buffer): Promise<SIFTTemplate> {
     return new Promise((resolve, reject) => {
-        const scriptPath = path.join(process.cwd(), 'python-scripts', 'sift_processor.py');
+        // Caminho para o script Python - tenta vários locais possíveis
+        const possiblePaths = [
+            path.join(process.cwd(), 'python-scripts', 'sift_processor.py'),
+            path.join(__dirname, '..', '..', 'python-scripts', 'sift_processor.py'),
+            '/app/python-scripts/sift_processor.py'
+        ];
+        
+        // Encontra o primeiro caminho que existe
+        let scriptPath = possiblePaths[0];
+        for (const p of possiblePaths) {
+            try {
+                const fs = require('fs');
+                if (fs.existsSync(p)) {
+                    scriptPath = p;
+                    break;
+                }
+            } catch (e) {
+                // Continua tentando
+            }
+        }
+        
+        console.log(`[SIFT] Usando script Python em: ${scriptPath}`);
+        
+        // Spawna o processo Python
         const pythonProcess = spawn('python3', [scriptPath, 'extract']);
         
         let outputData = '';
         let errorData = '';
         
+        // Captura stdout
         pythonProcess.stdout.on('data', (data) => {
             outputData += data.toString();
         });
         
+        // Captura stderr
         pythonProcess.stderr.on('data', (data) => {
             errorData += data.toString();
         });
         
+        // Quando o processo termina
         pythonProcess.on('close', (code) => {
             if (code !== 0) {
                 console.error('Python stderr:', errorData);
@@ -74,6 +100,7 @@ export async function extractSIFTFeatures(imageBuffer: Buffer): Promise<SIFTTemp
             }
         });
         
+        // Envia a imagem em base64 para o stdin do Python
         pythonProcess.stdin.write(imageBuffer.toString('base64'));
         pythonProcess.stdin.end();
     });
@@ -90,7 +117,25 @@ export async function compareSIFTTemplates(
     template2: SIFTTemplate
 ): Promise<ComparisonResult> {
     return new Promise((resolve, reject) => {
-        const scriptPath = path.join(process.cwd(), 'python-scripts', 'sift_processor.py');
+        // Caminho para o script Python - tenta vários locais possíveis
+        const possiblePaths = [
+            path.join(process.cwd(), 'python-scripts', 'sift_processor.py'),
+            path.join(__dirname, '..', '..', 'python-scripts', 'sift_processor.py'),
+            '/app/python-scripts/sift_processor.py'
+        ];
+        
+        let scriptPath = possiblePaths[0];
+        for (const p of possiblePaths) {
+            try {
+                const fs = require('fs');
+                if (fs.existsSync(p)) {
+                    scriptPath = p;
+                    break;
+                }
+            } catch (e) {
+                // Continua tentando
+            }
+        }
         
         const pythonProcess = spawn('python3', [scriptPath, 'compare']);
         
