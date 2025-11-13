@@ -1,6 +1,11 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
  * Interface para o template SIFT
@@ -35,13 +40,15 @@ export interface ComparisonResult {
 function findPythonScript(): string {
     const possiblePaths: string[] = [
         path.join(process.cwd(), 'python-scripts', 'sift_processor.py'),
-        path.join(__dirname, '..', '..', 'python-scripts', 'sift_processor.py'),
-        '/app/python-scripts/sift_processor.py'
+        path.join(process.cwd(), 'dist', 'python-scripts', 'sift_processor.py'),
+        '/app/python-scripts/sift_processor.py',
+        '/app/dist/python-scripts/sift_processor.py'
     ];
     
     for (const p of possiblePaths) {
         try {
             if (fs.existsSync(p)) {
+                console.log(`[SIFT] Script encontrado em: ${p}`);
                 return p;
             }
         } catch (e) {
@@ -49,6 +56,7 @@ function findPythonScript(): string {
         }
     }
     
+    console.warn(`[SIFT] Script não encontrado. Tentando caminho padrão.`);
     // Se não encontrar, retorna o primeiro (garantido que existe)
     return possiblePaths[0]!;
 }
